@@ -1,22 +1,23 @@
 import 'package:gemini_app/config/gemini/gemini_impl.dart';
-import 'package:gemini_app/presentation/providers/chat/is_gemini_writing.dart';
 import 'package:gemini_app/presentation/providers/users/user_provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:flutter_chat_types/flutter_chat_types.dart';
 import 'package:uuid/uuid.dart';
 
-part 'basic_chat.g.dart';
+part 'chat_with_context.g.dart';
 
 final uuid = Uuid();
 
-@riverpod
-class BasicChat extends _$BasicChat {
+@Riverpod(keepAlive: true)
+class ChatWithContext extends _$ChatWithContext {
   final gemini = GeminiImpl();
   late User geminiUser;
+  late String chatId;
   @override
   List<Message> build() {
     geminiUser = ref.read(geminiUserProvider);
+    chatId = Uuid().v4();
     return [];
   }
 
@@ -55,20 +56,14 @@ class BasicChat extends _$BasicChat {
     _geminiTextResponseStream(partialText.text, images: images);
   }
 
-  void _geminiTextResponse(String prompt) async {
-    _setGeminiWritingStatus(true);
-
-    final textResponse = await gemini.getResponse(prompt);
-    _createTextMessage(textResponse, geminiUser);
-    _setGeminiWritingStatus(false);
-  }
-
   void _geminiTextResponseStream(
     String prompt, {
     List<XFile> images = const [],
   }) async {
     _createTextMessage('Gemini está pensando', geminiUser);
-    gemini.getResponseStream(prompt, images: images).listen((responseChunk) {
+    gemini.getChatStream(prompt, chatId, images: images).listen((
+      responseChunk,
+    ) {
       if (responseChunk.isEmpty) return;
       final updatedMessages = [...state];
       final updatedMessage = (updatedMessages.first as TextMessage).copyWith(
@@ -80,6 +75,11 @@ class BasicChat extends _$BasicChat {
   }
 
   //Helper methods
+  void newChat() {
+    chatId = Uuid().v4();
+    state = [];
+  }
+
   void _createTextMessage(String textResponse, User author) {
     final message = TextMessage(
       author: author,
@@ -100,12 +100,5 @@ class BasicChat extends _$BasicChat {
       createdAt: DateTime.now().millisecondsSinceEpoch,
     );
     state = [message, ...state];
-  }
-
-  void _setGeminiWritingStatus(bool isWriting) {
-    final isGeminiWriting = ref.read(isGeminiWritingProvider.notifier);
-    isWriting
-        ? isGeminiWriting.setIsWriting()
-        : isGeminiWriting.setIsNotWriting();
   }
 }
