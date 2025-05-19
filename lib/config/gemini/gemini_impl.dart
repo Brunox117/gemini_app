@@ -14,7 +14,6 @@ class GeminiImpl {
       final response = await _http.post('/basic-prompt', data: body);
       return response.data;
     } catch (e) {
-      print(e);
       throw Exception("Can't get gemini response");
     }
   }
@@ -23,10 +22,42 @@ class GeminiImpl {
     String prompt, {
     List<XFile> images = const [],
   }) async* {
+    yield* _getStreamResponse(
+      prompt: prompt,
+      endpoint: '/basic-prompt-stream',
+      files: images,
+    );
+  }
+
+  Stream<String> getChatStream(
+    String prompt,
+    String chatId, {
+    List<XFile> images = const [],
+  }) async* {
+    yield* _getStreamResponse(
+      prompt: prompt,
+      endpoint: '/chat-stream',
+      files: images,
+      formFields: {'chatId': chatId},
+    );
+  }
+
+  // Emitir el stream de informacion
+  Stream<String> _getStreamResponse({
+    required String prompt,
+    required String endpoint,
+    List<XFile> files = const [],
+    Map<String, dynamic> formFields = const {},
+  }) async* {
+    //Agregamos las entradas
     final formData = FormData();
     formData.fields.add(MapEntry('prompt', prompt));
-    if (images.isNotEmpty) {
-      for (final file in images) {
+    for (final entry in formFields.entries) {
+      formData.fields.add(MapEntry(entry.key, entry.value));
+    }
+    //Agregamos los archivos
+    if (files.isNotEmpty) {
+      for (final file in files) {
         formData.files.add(
           MapEntry(
             'files',
@@ -38,7 +69,7 @@ class GeminiImpl {
 
     // final body = jsonEncode({'prompt': prompt});
     final response = await _http.post(
-      '/basic-prompt-stream',
+      endpoint,
       data: formData,
       options: Options(responseType: ResponseType.stream),
     );
@@ -51,16 +82,14 @@ class GeminiImpl {
     }
   }
 
-  Stream<String> getChatStream(
-    String prompt,
-    String chatId, {
-    List<XFile> images = const [],
-  }) async* {
+  Future<String?> generateImage(
+    String prompt, {
+    List<XFile> files = const [],
+  }) async {
     final formData = FormData();
     formData.fields.add(MapEntry('prompt', prompt));
-    formData.fields.add(MapEntry('chatId', chatId));
-    if (images.isNotEmpty) {
-      for (final file in images) {
+    if (files.isNotEmpty) {
+      for (final file in files) {
         formData.files.add(
           MapEntry(
             'files',
@@ -69,19 +98,12 @@ class GeminiImpl {
         );
       }
     }
-
-    // final body = jsonEncode({'prompt': prompt});
-    final response = await _http.post(
-      '/chat-stream',
-      data: formData,
-      options: Options(responseType: ResponseType.stream),
-    );
-    final stream = response.data.stream as Stream<List<int>>;
-    String buffer = '';
-    await for (final chunk in stream) {
-      final chunkString = utf8.decode(chunk, allowMalformed: true);
-      buffer += chunkString;
-      yield buffer;
+    try {
+      final response = await _http.post('/image-generation', data: formData);
+      return response.data['imageUrl'];
+    } catch (e) {
+      print(e);
+      return null;
     }
   }
 }
